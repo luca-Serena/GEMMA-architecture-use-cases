@@ -1,0 +1,5 @@
+random.seed: 42
+stop.at: 100
+world.width: 500
+world.height: 500
+
