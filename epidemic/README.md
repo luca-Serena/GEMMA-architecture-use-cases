@@ -15,10 +15,10 @@
 
 ## Requirements
 The following python packages are required:
--numpy
--scipy
--mpi4py
--repast4py
+- numpy
+- scipy
+- mpi4py
+- repast4py
 
 ## Usage
 The file to execute is `seir.py`, and one must indicate the number of individuals through the command line. Other parameters are settable in the file `seir.py`
