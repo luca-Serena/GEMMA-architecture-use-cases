@@ -3,6 +3,9 @@ import sys
 import os
 import numpy as np
 from scipy.integrate import odeint
+
+
+def biggest_variation()
     
 
 #unused here    
@@ -47,7 +50,7 @@ if __name__ == "__main__":
 
     ############################      run    ##################################
     step = 0
-    while ((E > 0 or I > 0) and step < total_steps):                                                    # repeat until epidemic is over or the assigned number of steps has been executed
+    while ((E > 0 or I > 0) and step < total_steps):                                                     #repeat until epidemic is over or the assigned number of steps has been executed
         step+=1
         new_infected = -1   #reset at the beginning of the round
         if S > 0:           #if there are not susceptible people then it does not make sense to run the mobility-infection model
@@ -60,16 +63,14 @@ if __name__ == "__main__":
         time = np.linspace(0, duration, 1000)                       
         state0 = (E, I, R)
 
-        res = odeint(EIR_model, y0=state0, t=time, args=(σ, γ))                                         #run EIR model
+        res = odeint(EIR_model, y0=state0, t=time, args=(σ, γ))                                          #run EIR model
         E_hat, I_hat, R_hat = zip(*res)
         E = int(E_hat[-1])
         I = int(I_hat[-1])
         R = int(R_hat[-1])
-        continuous_loss = population_size - (S + E + I + R)                                             #local consistency control: manages continuous loss
+        continuous_loss = population_size - (S + E + I + R)                                              #local consistency control: manages continuous loss
         if continuous_loss > 0:  #add the loss from continuous to discrete to the biggest compartment
             if E > I and E > R:
-                E += continuous_loss
-            elif I > R:
                 I += continuous_loss
             else:
                 R += continuous_loss
@@ -79,4 +80,4 @@ if __name__ == "__main__":
             print("step " + str(step)) 
 
 
-    
+
