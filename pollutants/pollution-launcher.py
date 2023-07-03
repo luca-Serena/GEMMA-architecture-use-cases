@@ -27,8 +27,11 @@ GPL = 0
 for i in range (steps):
     netlogo.command('go')    
     if i % stepsForUpdate == 10: 
-        petroil, GPL, electric = odepollution.run (petroil, GPL, electric)                                          # compartmental model launched
+        pollution =  netlogo.report ("sum [ pollution ] of patches")
+        print ("pollution: " + str(pollution))
+        petroil, GPL, electric = odepollution.run (petroil, GPL, electric, pollution/10000)                                          # compartmental model launched
         netlogo.command('update-vehicles ' + str(int(petroil)) + ' ' + str(int(GPL)) + ' ' + str(int(electric)) )	# update number of vehicles
         print (str(int(petroil)) + ' ' + str(int(GPL)) + ' ' + str(int(electric)))
+        
      
     time.sleep(0.001)                                # in order to allow the user to visualize changes through time, otherwise it runs at maximum speed
