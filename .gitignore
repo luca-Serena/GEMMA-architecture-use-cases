@@ -3,3 +3,7 @@ epidemic/res.txt
 pollutants/__pycache__/*
 wolf_sheep_grass/wolf_sheep/__pycache__/*
 wolf_sheep_grass/wolf_sheep/test*
+scheme.png
+*__pycache*
+epidemic-test/
+epidemic/MultilevelInterface.py
