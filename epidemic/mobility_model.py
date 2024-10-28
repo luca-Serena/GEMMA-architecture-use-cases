@@ -10,6 +10,38 @@ from repast4py import context as ctx
 import repast4py
 from repast4py.space import DiscretePoint as dpt
 
+from GEMMA_Interfaces import GEMMA_Component
+from checkers import CallConditionsChecker, ConsistencyChecker
+
+
+class MobilityModel(GEMMA_Component):
+
+    def __init__(self):
+         pass
+
+    def setup (self, *args):
+        self.S, self.E, self.I, self.R = args
+        if (os.path.exists ("output/meet_log.csv")):
+            os.system ("rm output/*")
+        
+
+    def advance(self, *args):
+        params = parameters.init_params("random_walk.yaml", '{}')
+        run(params, self.S, self.E, self.I, self.R)
+        self.retrieve_results()
+
+    def retrieve_results (self):
+        with open('output.txt', 'w') as f:
+            print (counter, file=f)
+
+    def check_call_conditions (self, checker, *args):
+        return checker.checkCallConditionsMobility(self,*args)
+
+
+    def check_consistency(self, checker, *args):
+        return checker.checkConsistencyMobility(self, *args)
+
+
 counter=0
 
 class Walker(core.Agent):
@@ -82,7 +114,11 @@ class Model:
         params: the simulation input parameters
     """
 
-    def __init__(self, comm: MPI.Intracomm, params: Dict):
+    def __init__(self, comm: MPI.Intracomm, params: Dict, S, E, I, R):
+        S = int(S)
+        E = int(E)
+        I = int(I)
+        R = int(R)
         # create the schedule
         self.runner = schedule.init_schedule_runner(comm)
         self.runner.schedule_repeating_event(1, 1, self.step)
@@ -144,19 +180,7 @@ class Model:
         self.runner.execute()
 
 
-def run(params: Dict):
-    model = Model(MPI.COMM_WORLD, params)
+def run(params: Dict, S, E, I, R):
+    model = Model(MPI.COMM_WORLD, params, S, E, I, R)
     model.start()
 
-
-if __name__ == "__main__":
-    S = int(sys.argv[1])
-    E = int(sys.argv[2])
-    I = int(sys.argv[3])
-    R = int(sys.argv[4])
-    if (os.path.exists ("output/meet_log.csv")):
-    	os.system ("rm output/*")
-    params = parameters.init_params("random_walk.yaml", '{}')
-    run(params)
-    with open('output.txt', 'w') as f:
-        print (counter, file=f)

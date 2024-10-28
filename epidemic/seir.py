@@ -3,9 +3,9 @@ import sys
 import os
 import numpy as np
 from scipy.integrate import odeint
-
-
-def biggest_variation()
+from checkers import ConsistencyChecker, CallConditionsChecker
+from GEMMA_Interfaces import GEMMA_Component, GEMMA_Director
+from mobility_model import MobilityModel
     
 
 #unused here    
@@ -29,55 +29,82 @@ def EIR_model(state : tuple, time : np.ndarray,
     return δE, δI, δR 
         
 
+class Launcher (GEMMA_Director):
+
+    def __init__ (self):#, sub_models):
+        super().__init__()
+        self.σ, self.γ = 1, 0.1                        #σ = E --> I;  γ = I --> R
+        if len(sys.argv) > 2:
+            self.σ = float(sys.argv[2])
+            self.γ = float(sys.argv[3])
+        self.resultFile = "res.txt"                #output file
+        if os.path.isfile(self.resultFile):
+            os.remove (self.resultFile)
+        self.resList = []
+            
+    
+        
+
+    def instantiate_sub_models (self, *args):
+        self.sub_models ["mobility"] = MobilityModel()
+
+
+    def setup(self, total_steps):
+        self.parameters["population_size"] = int(sys.argv[1])
+        self.parameters["initial_exposed"] = 10                  #individuals that are already exposed at the beginning of the simulation
+        self.parameters ["duration"] = 0.15                         #duration of the continuous model execution
+        self.parameters["total_steps"] = total_steps
+        self.S, self.E, self.I, self.R = self.parameters["population_size"] - self.parameters["initial_exposed"], self.parameters["initial_exposed"], 0, 0  #initial number of individuals for each compartment
+
+
+    def advance(self, dt):
+        step = 0
+        while ((self.E > 0 or self.I > 0) and step < self.parameters["total_steps"]):                                                     #repeat until epidemic is over or the assigned number of steps has been executed
+            step+=1
+            new_infected = -1   #reset at the beginning of the round
+            if self.sub_models["mobility"].check_call_conditions(self, self.S, self.E, self.I) == True:         #if there are not susceptible people then it does not make sense to run the mobility-infection model
+                #os.system ("python3 mobility_model.py " + str (S) + " " + str (E) + " " + str(I) + " " + str(R))    #run the mobility model
+                self.sub_models["mobility"].setup(self.S, self.E, self.I, self.R)
+                self.sub_models["mobility"].advance()
+                with open('output.txt') as f:                                                                # read the number of new infected people
+                    new_infected = int(f.readline())
+
+                self.S, self.E = self.sub_models["mobility"].check_consistency(self, new_infected, self.S, self.E)
+
+                
+            time = np.linspace(0, self.parameters["duration"], 1000)                       
+            state0 = (self.E, self.I, self.R)
+
+            res = odeint(EIR_model, y0=state0, t=time, args=(self.σ, self.γ))                                          #run EIR model
+            E_hat, I_hat, R_hat = zip(*res)
+            newE = int(E_hat[-1])
+            newI = int(I_hat[-1])
+            newR = int(R_hat[-1])
+            
+            self.S, self.E, self.I, self.R = self.check_consistency(self, self.parameters["population_size"], self.S, newE, newI, newR)
+
+            self.resList.append("at step " + str(step) + " S = " + str(self.S) + "; E = " + str(self.E) + "; I = " + str(self.I) + "; R = " + str(self.R) + "\n")
+            print("Step " + str(step) + " has ended") 
+
+
+    def check_consistency(self, checker, *args):
+        return checker.checkConsistencyODE(self,*args) 
+
+    def check_call_conditions (self, checker, *args):
+        pass        
+
+    def retrieve_results (self, *args):
+        with open (self.resultFile, 'a') as r:                                                                 #output function: write epidemic progress at each step
+            for elem in self.resList:
+                r.write(self.resList)
+
 
 if __name__ == "__main__":
 
-    #######################     parameters and settings #####################################
-    population_size = int(sys.argv[1])
-    σ, γ = 1, 0.1                        #σ = E --> I;  γ = I --> R
-    if len(sys.argv) > 2:
-        σ = float(sys.argv[2])
-        γ = float(sys.argv[3])
-    initial_exposed_fraction = 1/200      #fraction of individuals that are already exposed at the beginning of the simulation
-    duration = 0.15                       #duration of the continuous model execution
     total_steps = 20
-    resultFile = "res.txt"                #output file
-    if os.path.isfile(resultFile):
-        os.remove (resultFile)
-        
-    S,E,I,R = population_size - int(population_size /100), int(population_size * initial_exposed_fraction), 0, 0  #initial number of individuals for each compartment
-    
-
-    ############################      run    ##################################
-    step = 0
-    while ((E > 0 or I > 0) and step < total_steps):                                                     #repeat until epidemic is over or the assigned number of steps has been executed
-        step+=1
-        new_infected = -1   #reset at the beginning of the round
-        if S > 0:           #if there are not susceptible people then it does not make sense to run the mobility-infection model
-            os.system ("python3 rndwalk.py " + str (S) + " " + str (E) + " " + str(I) + " " + str(R))    #run the mobility model
-            with open('output.txt') as f:                                                                # read the number of new infected people
-                new_infected = int(f.readline())
-                E+= new_infected                                                                         # update compartments
-                S-= new_infected
-            
-        time = np.linspace(0, duration, 1000)                       
-        state0 = (E, I, R)
-
-        res = odeint(EIR_model, y0=state0, t=time, args=(σ, γ))                                          #run EIR model
-        E_hat, I_hat, R_hat = zip(*res)
-        E = int(E_hat[-1])
-        I = int(I_hat[-1])
-        R = int(R_hat[-1])
-        continuous_loss = population_size - (S + E + I + R)                                              #local consistency control: manages continuous loss
-        if continuous_loss > 0:  #add the loss from continuous to discrete to the biggest compartment
-            if E > I and E > R:
-                I += continuous_loss
-            else:
-                R += continuous_loss
-    
-        with open (resultFile, 'a') as r:                                                                 #output function: write epidemic progress at each step
-            r.write("at step " + str(step) + " S = " + str(S) + "; E = " + str(E) + "; I = " + str(I) + "; R = " + str(R) + "\n")
-            print("step " + str(step)) 
-
-
-
+    director = Launcher()
+    director.instantiate_sub_models ()
+    director.setup(total_steps)
+    director.advance(total_steps)
+    director.retrieve_results()
+    print ("Simulation Ended")
