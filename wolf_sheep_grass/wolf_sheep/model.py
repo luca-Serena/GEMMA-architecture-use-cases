@@ -10,14 +10,17 @@ Replication of the model found in NetLogo:
 """
 
 import mesa
-import lotkaVolterra
+from lotkaVolterra import LotkaVolterra
 
 from wolf_sheep.scheduler import RandomActivationByTypeFiltered
 #from wolf_sheep.agents import Wolf, Sheep, GrassPatch
 from wolf_sheep.agents import Sheep, GrassPatch
+from GEMMA_Interfaces import GEMMA_Component, GEMMA_Director
+from checkers import ConsistencyChecker, CallConditionsChecker
 
 
-class WolfSheep(mesa.Model):
+
+class WolfSheep(mesa.Model, GEMMA_Director):
     """
     Wolf-Sheep Predation Model
     """
@@ -51,8 +54,6 @@ class WolfSheep(mesa.Model):
         initial_wolves=50,
         sheep_reproduce=0.04,
         lotkaVolterraCallFrequency = 10,
-        #wolf_reproduce=0.05,
-        #wolf_gain_from_food=20,
         grass=False,
         grass_regrowth_time=30,
         sheep_gain_from_food=4,
@@ -73,20 +74,37 @@ class WolfSheep(mesa.Model):
         """
         super().__init__()
         # Set parameters
-        self.width = width
-        self.height = height
-        self.initial_sheep = initial_sheep
+        self.parameters = {}
+        self.parameters["width"] = width
+        self.parameters["height"] = height
+        self.parameters["initial_sheep"] = initial_sheep
         self.wolves = initial_wolves
-        self.sheep_reproduce = sheep_reproduce
-        #self.wolf_reproduce = wolf_reproduce
-        #self.wolf_gain_from_food = wolf_gain_from_food
+        self.parameters["sheep_reproduce"] = sheep_reproduce
         self.grass = grass
-        self.grass_regrowth_time = grass_regrowth_time
-        self.sheep_gain_from_food = sheep_gain_from_food
-        self.frequencyOfCall = lotkaVolterraCallFrequency
+        self.parameters["grass_regrowth_time"] = grass_regrowth_time
+        self.parameters["sheep_gain_from_food"] = sheep_gain_from_food
+        self.parameters["frequencyOfCall"] = lotkaVolterraCallFrequency
+        self.parameters["total_steps"] = 200
+        self.sub_models = {}
+        self.instantiate_sub_models()
+        self.setup()
+
+
+    def instantiate_sub_models (self, *args):
+        self.sub_models ["LotkaVolterra"] = LotkaVolterra() 
+
+
+    def step(self):
+        self.advance()
+            
+
+
+    def setup (self):
+        self.resultFile = "res.txt"
+        self.resList = [] 
 
         self.schedule = RandomActivationByTypeFiltered(self)
-        self.grid = mesa.space.MultiGrid(self.width, self.height, torus=True)
+        self.grid = mesa.space.MultiGrid(self.parameters["width"], self.parameters["height"], torus=True)
         self.datacollector = mesa.DataCollector(
             {
                 #"Wolves": lambda m: m.schedule.get_type_count(Wolf),
@@ -95,28 +113,20 @@ class WolfSheep(mesa.Model):
                     GrassPatch, lambda x: x.fully_grown
                 ),
             }
-        )
+        )         
 
-        # Create sheep:
-        for i in range(self.initial_sheep):
-            x = self.random.randrange(self.width)
-            y = self.random.randrange(self.height)
-            energy = self.random.randrange(2 * self.sheep_gain_from_food)
+        self.running = True
+        self.datacollector.collect(self)
+         # Create sheep:
+        for i in range(self.parameters["initial_sheep"]):
+            x = self.random.randrange(self.parameters["width"])
+            y = self.random.randrange(self.parameters["height"])
+            energy = self.random.randrange(2 * self.parameters["sheep_gain_from_food"])
             sheep = Sheep(self.next_id(), (x, y), self, True, energy)
             self.grid.place_agent(sheep, (x, y))
             self.schedule.add(sheep)
 
-        # Create wolves
-        '''
-        for i in range(self.initial_wolves):
-            x = self.random.randrange(self.width)
-            y = self.random.randrange(self.height)
-            energy = self.random.randrange(2 * self.wolf_gain_from_food)
-            wolf = Wolf(self.next_id(), (x, y), self, True, energy)
-            self.grid.place_agent(wolf, (x, y))
-            self.schedule.add(wolf)
-        '''
-
+       
         # Create grass patches
         if self.grass:
             for agent, x, y in self.grid.coord_iter():
@@ -124,71 +134,69 @@ class WolfSheep(mesa.Model):
                 fully_grown = self.random.choice([True, False])
 
                 if fully_grown:
-                    countdown = self.grass_regrowth_time
+                    countdown = self.parameters["grass_regrowth_time"]
                 else:
-                    countdown = self.random.randrange(self.grass_regrowth_time)
+                    countdown = self.random.randrange(self.parameters["grass_regrowth_time"])
 
                 patch = GrassPatch(self.next_id(), (x, y), self, fully_grown, countdown)
                 self.grid.place_agent(patch, (x, y))
                 self.schedule.add(patch)
 
-        self.running = True
-        self.datacollector.collect(self)
+    def advance(self):
+        if self.schedule.time < self.parameters["total_steps"]:
+            self.schedule.step()
+            # collect data
+            self.datacollector.collect(self)
 
-    def step(self):
-        self.schedule.step()
-        # collect data
-        self.datacollector.collect(self)
-
-        if self.schedule.time % self.frequencyOfCall == 0:                               
-            sheeps, wolves = lotkaVolterra.main(self.schedule.get_type_count(Sheep), int(self.wolves))              #calling lotka volterra model for sheep-wolves regulation
-            sheeps = int(sheeps)                                                                                    #discretize the number of agents
-            wolves = int(wolves)
-            with open ('res.txt', 'a') as f:
-                print ("At " + str(self.schedule.time) + "  there are " + str(sheeps) + " sheeps and " + str(wolves) + " wolves", file=f)
-            self.wolves = wolves                                                                            #number of wolves updated
-            sheepsDifferential = sheeps - self.schedule.get_type_count(Sheep)
-            if sheepsDifferential > 0:                                                                              #a certain number of sheep must be created
-                for i in range (sheepsDifferential):
-                    x = self.random.randrange(self.width)
-                    y = self.random.randrange(self.height)
-                    energy = self.random.randrange(2 * self.sheep_gain_from_food)
-                    sheep = Sheep(self.next_id(), (x, y), self, True, energy)
-                    self.grid.place_agent(sheep, (x, y))
-                    self.schedule.add(sheep)
-            else:                                                                                                   #a certain number of sheep must eliminated from agents' list
-                for i in range (sheepsDifferential):
-                    self.schedule.agents().pop(self.random.randrange(len(schedule.agents())))
+            if  self.sub_models["LotkaVolterra"].check_call_conditions(self, self.schedule.time , self.parameters["frequencyOfCall"]) == True:
+                sheeps, wolves = self.sub_models["LotkaVolterra"].advance(self.schedule.get_type_count(Sheep), int(self.wolves))              #calling lotka volterra model for sheep-wolves regulation
+                sheeps, wolves = self.sub_models["LotkaVolterra"].check_consistency(self, sheeps, wolves)
+                self.resList.append("At " + str(self.schedule.time) + "  there are " + str(sheeps) + " sheeps and " + str(wolves) + " wolves\n")
+                self.wolves = wolves                                                                            #number of wolves updated
+                sheepsDifferential = sheeps - self.schedule.get_type_count(Sheep)
+                if sheepsDifferential > 0:                                                                              #a certain number of sheep must be created
+                    for i in range (sheepsDifferential):
+                        x = self.random.randrange(self.parameters["width"])
+                        y = self.random.randrange(self.parameters["height"])
+                        energy = self.random.randrange(2 * self.parameters["sheep_gain_from_food"])
+                        sheep = Sheep(self.next_id(), (x, y), self, True, energy)
+                        self.grid.place_agent(sheep, (x, y))
+                        self.schedule.add(sheep)
+                else:                                                                                                   #a certain number of sheep must eliminated from agents' list
+                    for i in range (sheepsDifferential):
+                        self.schedule.agents().pop(self.random.randrange(len(schedule.agents())))
 
 
-        if self.verbose:
-            print(
-                [
-                    self.schedule.time,
-                    #self.schedule.get_type_count(Wolf),
-                    self.schedule.get_type_count(Sheep),
-                    self.schedule.get_type_count(GrassPatch, lambda x: x.fully_grown),
-                ]
-            )
+            if self.verbose:
+                print(
+                    [
+                        self.schedule.time,
+                        #self.schedule.get_type_count(Wolf),
+                        self.schedule.get_type_count(Sheep),
+                        self.schedule.get_type_count(GrassPatch, lambda x: x.fully_grown),
+                    ]
+                )
 
-    def run_model(self, step_count=200):
+        else:
+            self.running = False
+            self.retrieve_results()
 
-        if self.verbose:
-            #print("Initial number wolves: ", self.schedule.get_type_count(Wolf))
-            print("Initial number sheep: ", self.schedule.get_type_count(Sheep))
-            print(
-                "Initial number grass: ",
-                self.schedule.get_type_count(GrassPatch, lambda x: x.fully_grown),
-            )
 
-        for i in range(step_count):
-            self.step()
+    def retrieve_results(self): 
+        print("")
+        #print("Final number wolves: ", self.schedule.get_type_count(Wolf))
+        print("Final number sheep: ", self.schedule.get_type_count(Sheep))
+        print(
+            "Final number grass: ",
+            self.schedule.get_type_count(GrassPatch, lambda x: x.fully_grown),
+        )
+        with open (self.resultFile, 'a') as r:                                                                 #output function: write epidemic progress at each step
+            for elem in self.resList:
+                r.write(elem)
+        
 
-        if self.verbose:
-            print("")
-            #print("Final number wolves: ", self.schedule.get_type_count(Wolf))
-            print("Final number sheep: ", self.schedule.get_type_count(Sheep))
-            print(
-                "Final number grass: ",
-                self.schedule.get_type_count(GrassPatch, lambda x: x.fully_grown),
-            )
+    def check_call_conditions(self, checker, *args):
+        pass
+
+    def check_consistency (self, checker, *args):
+        pass
