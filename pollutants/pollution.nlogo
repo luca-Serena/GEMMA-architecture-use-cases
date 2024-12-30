@@ -158,14 +158,14 @@ years
 
 PLOT
 18
-288
+262
 289
-471
+445
 Pollution level
 Time
 Pollution
 0.0
-3000.0
+2000.0
 0.0
 0.0
 true
@@ -176,14 +176,14 @@ PENS
 
 PLOT
 17
-60
+34
 288
-253
+227
 Vehicles by fuel
 Time
 Vehicles
 0.0
-3000.0
+2000.0
 0.0
 200.0
 true
