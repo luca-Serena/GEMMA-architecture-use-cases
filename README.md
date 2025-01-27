@@ -1,4 +1,4 @@
-# Multilevel-extension-use-cases
+# Multilevel-architecture-use-cases
 
 - Sheep-Wolves-Grass model
 
